@@ -294,6 +294,7 @@
           const res = await fetch(`${baseUrl}/health`, {
             method: 'GET',
             mode: 'cors',
+            credentials: 'omit',
             cache: 'no-cache',
             headers: { 'Accept': 'application/json' },
             signal: controller.signal
@@ -532,6 +533,7 @@
         const resp = await fetch(`${url}/embed`, {
           method: 'POST',
           mode: 'cors',
+          credentials: 'omit',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ texts: text, task: task, truncate_dim: dim })
         });
@@ -576,6 +578,7 @@
         const resp = await fetch(`${url}/embed`, {
           method: 'POST',
           mode: 'cors',
+          credentials: 'omit',
           body: formData
         });
         if (!resp.ok) {

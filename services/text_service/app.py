@@ -13,13 +13,14 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# Enable CORS for web UI access
+# Enable CORS for web UI access (wildcard origins, public embedding microservice)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 session = None
