@@ -21,8 +21,8 @@ def run_api_tests():
     # -------------------------------------------------------------
     # 1. TEST TEXT SERVICE
     # -------------------------------------------------------------
-    print("\n[1/3] Testing Text Embedding Service (deploy/text_service/app.py)...")
-    from deploy.text_service.app import app as text_app
+    print("\n[1/3] Testing Text Embedding Service (services/text_service/app.py)...")
+    from services.text_service.app import app as text_app
 
     with TestClient(text_app) as text_client:
         # Health check
@@ -77,8 +77,8 @@ def run_api_tests():
     # -------------------------------------------------------------
     # 2. TEST IMAGE SERVICE
     # -------------------------------------------------------------
-    print("\n[2/3] Testing Image Embedding Service (deploy/image_service/app.py)...")
-    from deploy.image_service.app import app as image_app
+    print("\n[2/3] Testing Image Embedding Service (services/image_service/app.py)...")
+    from services.image_service.app import app as image_app
 
     # Generate sample apple image in memory
     img = Image.new("RGB", (256, 256), color=(255, 255, 255))
