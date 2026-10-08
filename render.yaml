@@ -18,7 +18,7 @@ services:
       - key: OMP_NUM_THREADS
         value: "1"
 
-  # 2. Image & Video Embedding API (4-bit Q4, 438M parameters, ~420MB RAM)
+  # 2. Image Embedding API (63MB Q4 ONNX Runtime, ~180MB RAM)
   - type: web
     name: embeddinggemma-image
     runtime: docker
@@ -29,12 +29,10 @@ services:
     healthCheckPath: /health
     envVars:
       - key: PORT
-        value: 8000
+        value: "10000"
       - key: MALLOC_ARENA_MAX
         value: "2"
       - key: PYTHONUNBUFFERED
-        value: "1"
-      - key: TORCH_NUM_THREADS
         value: "1"
       - key: OMP_NUM_THREADS
         value: "1"
