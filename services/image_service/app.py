@@ -107,3 +107,56 @@ async def embed_image(
         dimension=dim,
         format=file.content_type or "image/png",
     )
+
+class VideoEmbedResponse(BaseModel):
+    embedding: List[float]
+    dimension: int
+    frame_count: int
+    format: str
+    frame_embeddings: Optional[List[List[float]]] = None
+
+@app.post("/embed-batch", response_model=VideoEmbedResponse)
+@app.post("/embed-video", response_model=VideoEmbedResponse)
+async def embed_batch(
+    files: List[UploadFile] = File(...),
+    truncate_dim: Optional[int] = Form(768),
+):
+    if session is None:
+        raise HTTPException(status_code=503, detail="Model is still initializing")
+
+    if not files:
+        raise HTTPException(status_code=400, detail="No frames provided")
+
+    frames = files[:32]
+    batch_tensors = []
+    
+    for f in frames:
+        try:
+            content = await f.read()
+            img = Image.open(io.BytesIO(content))
+            batch_tensors.append(preprocess_image(img))
+        except Exception:
+            continue
+
+    if not batch_tensors:
+        raise HTTPException(status_code=400, detail="No valid frames could be decoded")
+
+    pixel_values = np.concatenate(batch_tensors, axis=0)
+    outputs = session.run(["pooler_output"], {"pixel_values": pixel_values})
+    embs = outputs[0]
+
+    dim = truncate_dim if truncate_dim in (128, 256, 512, 768) else 768
+    truncated_embs = embs[:, :dim]
+    
+    pooled = np.mean(truncated_embs, axis=0)
+    normalized_video_emb = normalize(pooled)
+
+    normalized_frame_embs = [normalize(f).tolist() for f in truncated_embs]
+
+    return VideoEmbedResponse(
+        embedding=normalized_video_emb.tolist(),
+        dimension=dim,
+        frame_count=len(batch_tensors),
+        format="video/temporal-pooling",
+        frame_embeddings=normalized_frame_embs,
+    )
