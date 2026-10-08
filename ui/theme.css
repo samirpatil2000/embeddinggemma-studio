@@ -280,3 +280,208 @@ textarea {
   border: 1px solid var(--rule);
   margin-top: 8px;
 }
+
+/* Status Badge in Header */
+#api-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transition: all 0.25s ease;
+  background: var(--paper-card);
+  border: 1px solid var(--rule);
+  color: var(--ink-muted);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  background: #9ca3af;
+  flex-shrink: 0;
+  transition: all 0.25s ease;
+}
+
+/* Online vibrant green state */
+#api-status-badge.status-online {
+  background: #ecfdf5;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+#api-status-badge.status-online .status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25), 0 0 10px #22c55e;
+}
+
+/* Partial online state */
+#api-status-badge.status-partial {
+  background: #fffbeb;
+  border-color: #fcd34d;
+  color: #b45309;
+}
+
+#api-status-badge.status-partial .status-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25), 0 0 8px #f59e0b;
+}
+
+/* Offline state */
+#api-status-badge.status-offline {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+#api-status-badge.status-offline .status-dot {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25), 0 0 8px #ef4444;
+}
+
+/* Checking state */
+#api-status-badge.status-checking {
+  background: #f4f1ea;
+  border-color: var(--rule);
+  color: var(--ink-muted);
+}
+
+#api-status-badge.status-checking .status-dot {
+  background: #0ea5e9;
+  box-shadow: 0 0 8px #0ea5e9;
+  animation: pulse-dot 1.2s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* Vector Inspector Container */
+.vector-inspector {
+  margin-top: 14px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 12px 14px;
+  display: none;
+}
+
+.inspector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.inspector-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.meta-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  color: var(--ink);
+}
+
+.inspector-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-download {
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+}
+
+.btn-download:hover {
+  background: #23482b;
+}
+
+.btn-ghost {
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+}
+
+.btn-ghost:hover {
+  background: var(--paper);
+}
+
+.vector-values-box {
+  background: #faf9f6;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: #2b2b27;
+  max-height: 84px;
+  overflow-y: auto;
+  word-break: break-all;
+}
+
+.vector-values-box.expanded {
+  max-height: 220px;
+}
+
+.vector-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-family: var(--font-body);
+  text-decoration: underline;
+  cursor: pointer;
+  margin-top: 6px;
+  padding: 0;
+  display: inline-block;
+}
+
+.vector-toggle-btn:hover {
+  color: #23482b;
+}
+
+.dim-warning-note {
+  font-size: 0.78rem;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  padding: 6px 10px;
+  border-radius: 3px;
+  margin-top: 10px;
+  display: none;
+}
+

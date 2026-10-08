@@ -12,7 +12,10 @@
     
     <header class="studio-header">
       <div>Google DeepMind &middot; Gemma 4 Architecture</div>
-      <div id="api-status-badge">API Status: Unchecked</div>
+      <div id="api-status-badge" class="status-badge status-checking" title="Connecting to microservices...">
+        <span class="status-dot"></span>
+        <span class="status-text">Checking endpoints...</span>
+      </div>
     </header>
 
     <h1 class="studio-title">EmbeddingGemma 2 Studio</h1>
@@ -24,11 +27,11 @@
     <div class="endpoint-bar">
       <div class="endpoint-group">
         <label for="text-url">Text Service Endpoint</label>
-        <input type="text" id="text-url" value="https://embeddinggemma-text.onrender.com" placeholder="https://embeddinggemma-text.onrender.com">
+        <input type="text" id="text-url" value="https://embeddinggemma-text.onrender.com" placeholder="https://embeddinggemma-text.onrender.com" onchange="cleanInputUrl(this)">
       </div>
       <div class="endpoint-group">
         <label for="image-url">Image Service Endpoint</label>
-        <input type="text" id="image-url" value="https://embeddinggemma-image.onrender.com" placeholder="https://embeddinggemma-image.onrender.com">
+        <input type="text" id="image-url" value="https://embeddinggemma-image.onrender.com" placeholder="https://embeddinggemma-image.onrender.com" onchange="cleanInputUrl(this)">
       </div>
       <button class="btn-ping" id="btn-ping" onclick="pingServices()">Ping APIs</button>
     </div>
@@ -62,6 +65,31 @@
 
         <button class="btn-primary" id="btn-embed-text" onclick="embedText()">Embed Text</button>
         <canvas id="text-vector-canvas" class="vector-mini-canvas"></canvas>
+
+        <!-- Text Vector Inspector & Download -->
+        <div class="vector-inspector" id="text-vector-inspector">
+          <div class="inspector-header">
+            <div class="inspector-meta">
+              <span class="meta-tag" id="text-meta-dim">Dim: 768</span>
+              <span class="meta-tag" id="text-meta-norm">Norm: 1.0000</span>
+              <span class="meta-tag" id="text-meta-range">Range: [0, 0]</span>
+            </div>
+            <div class="inspector-actions">
+              <button type="button" class="btn-sm btn-ghost" id="btn-copy-text" onclick="copyVector('text')" title="Copy raw vector JSON">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copy
+              </button>
+              <button type="button" class="btn-sm btn-download" id="btn-download-text" onclick="downloadVector('text')" title="Download embedding JSON file">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download (.json)
+              </button>
+            </div>
+          </div>
+          <div class="vector-values-box" id="text-values-box">
+            <span id="text-vector-preview"></span>
+          </div>
+          <button type="button" class="vector-toggle-btn" id="text-toggle-btn" onclick="toggleVectorExpansion('text')">Show full vector</button>
+        </div>
       </div>
 
       <!-- Image Panel -->
@@ -88,6 +116,31 @@
 
         <button class="btn-primary" id="btn-embed-image" onclick="embedImage()" disabled>Embed Image</button>
         <canvas id="image-vector-canvas" class="vector-mini-canvas"></canvas>
+
+        <!-- Image Vector Inspector & Download -->
+        <div class="vector-inspector" id="image-vector-inspector">
+          <div class="inspector-header">
+            <div class="inspector-meta">
+              <span class="meta-tag" id="image-meta-dim">Dim: 768</span>
+              <span class="meta-tag" id="image-meta-norm">Norm: 1.0000</span>
+              <span class="meta-tag" id="image-meta-range">Range: [0, 0]</span>
+            </div>
+            <div class="inspector-actions">
+              <button type="button" class="btn-sm btn-ghost" id="btn-copy-image" onclick="copyVector('image')" title="Copy raw vector JSON">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copy
+              </button>
+              <button type="button" class="btn-sm btn-download" id="btn-download-image" onclick="downloadVector('image')" title="Download embedding JSON file">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download (.json)
+              </button>
+            </div>
+          </div>
+          <div class="vector-values-box" id="image-values-box">
+            <span id="image-vector-preview"></span>
+          </div>
+          <button type="button" class="vector-toggle-btn" id="image-toggle-btn" onclick="toggleVectorExpansion('image')">Show full vector</button>
+        </div>
       </div>
 
     </div>
@@ -111,6 +164,7 @@
           </div>
           <div id="verdict-badge" style="font-size:.9rem; font-weight:500;">Awaiting Embeddings</div>
         </div>
+        <div id="dim-warning-note" class="dim-warning-note"></div>
       </div>
     </div>
 
@@ -120,6 +174,26 @@
     let textVector = null;
     let imageVector = null;
     let selectedImageFile = null;
+
+    const vectorState = {
+      text: { expanded: false, formattedPreview: '', formattedFull: '' },
+      image: { expanded: false, formattedPreview: '', formattedFull: '' }
+    };
+
+    function cleanUrl(url) {
+      if (!url) return '';
+      let u = String(url).trim().replace(/\/+$/, '');
+      if (!/^https?:\/\//i.test(u)) {
+        u = 'https://' + u;
+      }
+      return u;
+    }
+
+    function cleanInputUrl(input) {
+      if (input && input.value) {
+        input.value = cleanUrl(input.value);
+      }
+    }
 
     // Default sample image generator (Red Apple)
     window.addEventListener('DOMContentLoaded', () => {
@@ -180,41 +254,234 @@
     function updateDimension(type) {
       const dim = document.getElementById(`${type}-dim-select`).value;
       document.getElementById(`${type}-tensor-badge`).innerHTML = `Shape: [1 &times; ${dim}]`;
+      checkCrossModalSimilarity();
     }
 
     async function pingServices() {
-      const textUrl = document.getElementById('text-url').value.trim();
-      const imgUrl = document.getElementById('image-url').value.trim();
+      const textInput = document.getElementById('text-url');
+      const imgInput = document.getElementById('image-url');
       const badge = document.getElementById('api-status-badge');
-      badge.textContent = 'Checking endpoints...';
+      const pingBtn = document.getElementById('btn-ping');
+
+      const textUrl = cleanUrl(textInput.value);
+      const imgUrl = cleanUrl(imgInput.value);
+
+      if (textUrl && textInput.value !== textUrl) textInput.value = textUrl;
+      if (imgUrl && imgInput.value !== imgUrl) imgInput.value = imgUrl;
+
+      badge.className = 'status-badge status-checking';
+      badge.innerHTML = '<span class="status-dot"></span><span class="status-text">Pinging APIs...</span>';
+      badge.title = 'Sending health check to microservices...';
+      if (pingBtn) pingBtn.disabled = true;
+
+      async function checkEndpoint(baseUrl, label) {
+        if (!baseUrl) return { ok: false, label, error: 'URL is required' };
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+          const res = await fetch(`${baseUrl}/health`, {
+            method: 'GET',
+            mode: 'cors',
+            cache: 'no-cache',
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (!res.ok) {
+            return { ok: false, label, error: `HTTP ${res.status}` };
+          }
+          const data = await res.json().catch(() => null);
+          const isHealthy = Boolean(data && (data.status === 'healthy' || data.model_loaded === true));
+          return { ok: isHealthy, label, data: data || {} };
+        } catch (err) {
+          const msg = err.name === 'AbortError' ? 'Timeout (12s)' : (err.message || 'Network error');
+          return { ok: false, label, error: msg };
+        }
+      }
 
       try {
-        const [r1, r2] = await Promise.allSettled([
-          fetch(`${textUrl}/health`, { method: 'GET' }),
-          fetch(`${imgUrl}/health`, { method: 'GET' })
+        const [tRes, iRes] = await Promise.all([
+          checkEndpoint(textUrl, 'Text'),
+          checkEndpoint(imgUrl, 'Image')
         ]);
-        const tOk = r1.status === 'fulfilled' && r1.value.ok;
-        const iOk = r2.status === 'fulfilled' && r2.value.ok;
-        
-        if (tOk && iOk) {
-          badge.textContent = '● APIs Online';
-          badge.style.color = '#2e5c38';
+
+        if (tRes.ok && iRes.ok) {
+          badge.className = 'status-badge status-online';
+          badge.innerHTML = '<span class="status-dot"></span><span class="status-text">TEXT: ONLINE &middot; IMAGE: ONLINE</span>';
+          badge.title = `Text: ${tRes.data.service || 'healthy'} (${tRes.data.engine || 'ONNX Q4'})\nImage: ${iRes.data.service || 'healthy'} (${iRes.data.engine || 'ONNX Q4'})`;
+        } else if (tRes.ok || iRes.ok) {
+          badge.className = 'status-badge status-partial';
+          const tStatus = tRes.ok ? 'ONLINE' : 'OFFLINE';
+          const iStatus = iRes.ok ? 'ONLINE' : 'OFFLINE';
+          badge.innerHTML = `<span class="status-dot"></span><span class="status-text">TEXT: ${tStatus} | IMAGE: ${iStatus}</span>`;
+          badge.title = `Text: ${tRes.ok ? 'healthy' : tRes.error}\nImage: ${iRes.ok ? 'healthy' : iRes.error}`;
         } else {
-          badge.textContent = `● Text: ${tOk ? 'OK' : 'Offline'} | Image: ${iOk ? 'OK' : 'Offline'}`;
-          badge.style.color = '#c0392b';
+          badge.className = 'status-badge status-offline';
+          badge.innerHTML = '<span class="status-dot"></span><span class="status-text">TEXT: OFFLINE | IMAGE: OFFLINE</span>';
+          badge.title = `Text error: ${tRes.error}\nImage error: ${iRes.error}`;
         }
-      } catch (err) {
-        badge.textContent = '● APIs Offline (Check URLs)';
-        badge.style.color = '#c0392b';
+      } finally {
+        if (pingBtn) pingBtn.disabled = false;
       }
+    }
+
+    function renderVectorInspector(type, vector) {
+      const inspector = document.getElementById(`${type}-vector-inspector`);
+      const dimBadge = document.getElementById(`${type}-meta-dim`);
+      const normBadge = document.getElementById(`${type}-meta-norm`);
+      const rangeBadge = document.getElementById(`${type}-meta-range`);
+      const previewEl = document.getElementById(`${type}-vector-preview`);
+      const toggleBtn = document.getElementById(`${type}-toggle-btn`);
+      const valuesBox = document.getElementById(`${type}-values-box`);
+
+      if (!vector || !vector.length) {
+        inspector.style.display = 'none';
+        return;
+      }
+
+      const dim = vector.length;
+      let sumSq = 0, min = Infinity, max = -Infinity;
+      for (let i = 0; i < dim; i++) {
+        const v = vector[i];
+        sumSq += v * v;
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      const norm = Math.sqrt(sumSq);
+
+      dimBadge.textContent = `Dim: ${dim}`;
+      normBadge.textContent = `Norm: ${norm.toFixed(4)}`;
+      rangeBadge.textContent = `Range: [${min.toFixed(4)}, ${max.toFixed(4)}]`;
+
+      const previewSnippet = vector.slice(0, 14).map(v => (v >= 0 ? '+' : '') + v.toFixed(4)).join(', ');
+      const formattedPreview = `[ ${previewSnippet}, ... +${dim - 14} more dims ]`;
+      const formattedFull = `[\n  ` + vector.map((v, idx) => {
+        const valStr = (v >= 0 ? '+' : '') + v.toFixed(5);
+        return (idx > 0 && idx % 8 === 0) ? `\n  ${valStr}` : valStr;
+      }).join(', ') + `\n]`;
+
+      vectorState[type].formattedPreview = formattedPreview;
+      vectorState[type].formattedFull = formattedFull;
+      vectorState[type].expanded = false;
+
+      previewEl.textContent = formattedPreview;
+      valuesBox.classList.remove('expanded');
+      toggleBtn.textContent = `Show full vector (${dim})`;
+      inspector.style.display = 'block';
+    }
+
+    function toggleVectorExpansion(type) {
+      const state = vectorState[type];
+      const previewEl = document.getElementById(`${type}-vector-preview`);
+      const toggleBtn = document.getElementById(`${type}-toggle-btn`);
+      const valuesBox = document.getElementById(`${type}-values-box`);
+      const vector = type === 'text' ? textVector : imageVector;
+      if (!vector) return;
+
+      state.expanded = !state.expanded;
+      if (state.expanded) {
+        previewEl.textContent = state.formattedFull;
+        valuesBox.classList.add('expanded');
+        toggleBtn.textContent = 'Collapse preview';
+      } else {
+        previewEl.textContent = state.formattedPreview;
+        valuesBox.classList.remove('expanded');
+        toggleBtn.textContent = `Show full vector (${vector.length})`;
+      }
+    }
+
+    async function copyVector(type) {
+      const vector = type === 'text' ? textVector : imageVector;
+      if (!vector) return;
+      const btn = document.getElementById(`btn-copy-${type}`);
+      const textToCopy = JSON.stringify(vector);
+
+      try {
+        await navigator.clipboard.writeText(textToCopy);
+      } catch (err) {
+        const ta = document.createElement('textarea');
+        ta.value = textToCopy;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = 'Copied!';
+      btn.style.color = '#15803d';
+      setTimeout(() => {
+        btn.innerHTML = origHtml;
+        btn.style.color = '';
+      }, 1800);
+    }
+
+    function downloadVector(type) {
+      const isText = type === 'text';
+      const vector = isText ? textVector : imageVector;
+      if (!vector || !vector.length) {
+        alert(`No ${type} embedding available to download yet.`);
+        return;
+      }
+      const dim = vector.length;
+      let sumSq = 0, min = Infinity, max = -Infinity;
+      for (const v of vector) {
+        sumSq += v * v;
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      const norm = Math.sqrt(sumSq);
+
+      const payload = isText ? {
+        type: 'text_embedding',
+        model: 'EmbeddingGemma 2 (Gemma 4 Architecture)',
+        engine: 'onnxruntime-q4',
+        task: document.getElementById('task-select').value,
+        text: document.getElementById('text-input').value.trim(),
+        dimension: dim,
+        l2_norm: Number(norm.toFixed(6)),
+        min: Number(min.toFixed(6)),
+        max: Number(max.toFixed(6)),
+        created_at: new Date().toISOString(),
+        embedding: vector
+      } : {
+        type: 'image_embedding',
+        model: 'EmbeddingGemma 2 Vision (SigLIP Architecture)',
+        engine: 'onnxruntime-q4',
+        filename: selectedImageFile ? selectedImageFile.name : 'image.png',
+        format: selectedImageFile ? selectedImageFile.type : 'image/png',
+        dimension: dim,
+        l2_norm: Number(norm.toFixed(6)),
+        min: Number(min.toFixed(6)),
+        max: Number(max.toFixed(6)),
+        created_at: new Date().toISOString(),
+        embedding: vector
+      };
+
+      const jsonStr = JSON.stringify(payload, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const dlUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = dlUrl;
+      a.download = `embedding_${type}_${dim}d.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(dlUrl);
     }
 
     async function embedText() {
       const text = document.getElementById('text-input').value.trim();
       const task = document.getElementById('task-select').value;
       const dim = parseInt(document.getElementById('text-dim-select').value);
-      const url = document.getElementById('text-url').value.trim();
+      const url = cleanUrl(document.getElementById('text-url').value);
       const btn = document.getElementById('btn-embed-text');
+
+      if (!text) {
+        alert('Please enter text to embed.');
+        return;
+      }
 
       btn.disabled = true;
       btn.textContent = 'Encoding...';
@@ -222,16 +489,22 @@
       try {
         const resp = await fetch(`${url}/embed`, {
           method: 'POST',
+          mode: 'cors',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ texts: text, task: task, truncate_dim: dim })
         });
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData.detail || `HTTP ${resp.status} ${resp.statusText}`);
+        }
         const data = await resp.json();
         textVector = data.embeddings[0];
         document.getElementById('text-tensor-badge').innerHTML = `Shape: [1 &times; ${textVector.length}] &middot; Normalized`;
         drawVectorRibbon('text-vector-canvas', textVector);
+        renderVectorInspector('text', textVector);
         checkCrossModalSimilarity();
       } catch (e) {
-        alert('Failed to call Text Service: ' + e);
+        alert('Failed to call Text Service: ' + (e.message || e));
       } finally {
         btn.disabled = false;
         btn.textContent = 'Embed Text';
@@ -239,9 +512,12 @@
     }
 
     async function embedImage() {
-      if (!selectedImageFile) return;
+      if (!selectedImageFile) {
+        alert('Please select or drop an image first.');
+        return;
+      }
       const dim = document.getElementById('image-dim-select').value;
-      const url = document.getElementById('image-url').value.trim();
+      const url = cleanUrl(document.getElementById('image-url').value);
       const btn = document.getElementById('btn-embed-image');
 
       btn.disabled = true;
@@ -254,15 +530,21 @@
       try {
         const resp = await fetch(`${url}/embed`, {
           method: 'POST',
+          mode: 'cors',
           body: formData
         });
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData.detail || `HTTP ${resp.status} ${resp.statusText}`);
+        }
         const data = await resp.json();
         imageVector = data.embedding;
         document.getElementById('image-tensor-badge').innerHTML = `Shape: [1 &times; ${imageVector.length}] &middot; Normalized`;
         drawVectorRibbon('image-vector-canvas', imageVector);
+        renderVectorInspector('image', imageVector);
         checkCrossModalSimilarity();
       } catch (e) {
-        alert('Failed to call Image Service: ' + e);
+        alert('Failed to call Image Service: ' + (e.message || e));
       } finally {
         btn.disabled = false;
         btn.textContent = 'Embed Image';
@@ -270,39 +552,79 @@
     }
 
     function checkCrossModalSimilarity() {
-      if (!textVector || !imageVector) return;
+      const scoreEl = document.getElementById('score-text');
+      const gaugeFill = document.getElementById('gauge-fill');
+      const verdict = document.getElementById('verdict-badge');
+      const dimWarning = document.getElementById('dim-warning-note');
+
+      if (!textVector && !imageVector) {
+        scoreEl.textContent = '0.0000';
+        gaugeFill.style.width = '0%';
+        verdict.textContent = 'Awaiting Embeddings';
+        verdict.style.color = 'var(--ink-muted)';
+        dimWarning.style.display = 'none';
+        return;
+      }
+
+      if (textVector && !imageVector) {
+        scoreEl.textContent = '0.0000';
+        gaugeFill.style.width = '0%';
+        verdict.textContent = 'Text Ready &middot; Embed Image to Compute';
+        verdict.style.color = '#b45309';
+        dimWarning.style.display = 'none';
+        return;
+      }
+
+      if (!textVector && imageVector) {
+        scoreEl.textContent = '0.0000';
+        gaugeFill.style.width = '0%';
+        verdict.textContent = 'Image Ready &middot; Embed Text to Compute';
+        verdict.style.color = '#b45309';
+        dimWarning.style.display = 'none';
+        return;
+      }
 
       const len = Math.min(textVector.length, imageVector.length);
+      if (textVector.length !== imageVector.length) {
+        dimWarning.textContent = `Dimension note: Text (${textVector.length}d) and Vision (${imageVector.length}d) differ. Evaluated on common ${len}d MRL prefix.`;
+        dimWarning.style.display = 'block';
+      } else {
+        dimWarning.style.display = 'none';
+      }
+
       let dot = 0, normA = 0, normB = 0;
       for (let i = 0; i < len; i++) {
         dot += textVector[i] * imageVector[i];
         normA += textVector[i] * textVector[i];
         normB += imageVector[i] * imageVector[i];
       }
-      const sim = dot / (Math.sqrt(normA) * Math.sqrt(normB));
+      const sim = (normA > 0 && normB > 0) ? (dot / (Math.sqrt(normA) * Math.sqrt(normB))) : 0;
       const clamped = Math.max(0, Math.min(1, sim));
 
-      document.getElementById('score-text').textContent = sim.toFixed(4);
-      document.getElementById('gauge-fill').style.width = `${(clamped * 100).toFixed(1)}%`;
+      scoreEl.textContent = (sim >= 0 ? '+' : '') + sim.toFixed(4);
+      gaugeFill.style.width = `${(clamped * 100).toFixed(1)}%`;
 
-      const verdict = document.getElementById('verdict-badge');
       if (sim >= 0.65) {
         verdict.textContent = 'Strong Semantic Match';
-        verdict.style.color = '#2e5c38';
-      } else if (sim >= 0.45) {
+        verdict.style.color = '#15803d';
+      } else if (sim >= 0.40) {
         verdict.textContent = 'Moderate Alignment';
-        verdict.style.color = '#f0ad4e';
-      } else {
+        verdict.style.color = '#b45309';
+      } else if (sim >= 0.15) {
         verdict.textContent = 'Low Semantic Overlap';
-        verdict.style.color = '#d9534f';
+        verdict.style.color = '#d97706';
+      } else {
+        verdict.textContent = 'Negligible / Low Correlation';
+        verdict.style.color = '#6b6a63';
       }
     }
 
     function drawVectorRibbon(canvasId, vector) {
       const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
       const ctx = canvas.getContext('2d');
-      const w = canvas.width = canvas.clientWidth;
-      const h = canvas.height = canvas.clientHeight;
+      const w = canvas.width = canvas.clientWidth || 300;
+      const h = canvas.height = canvas.clientHeight || 36;
       const step = w / vector.length;
 
       for (let i = 0; i < vector.length; i++) {
