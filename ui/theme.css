@@ -297,6 +297,13 @@ textarea {
   background: var(--paper-card);
   border: 1px solid var(--rule);
   color: var(--ink-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+#api-status-badge:hover {
+  filter: brightness(0.97);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .status-dot {
@@ -451,6 +458,7 @@ textarea {
   max-height: 84px;
   overflow-y: auto;
   word-break: break-all;
+  white-space: pre-wrap;
 }
 
 .vector-values-box.expanded {

@@ -12,7 +12,7 @@
     
     <header class="studio-header">
       <div>Google DeepMind &middot; Gemma 4 Architecture</div>
-      <div id="api-status-badge" class="status-badge status-checking" title="Connecting to microservices...">
+      <div id="api-status-badge" class="status-badge status-checking" onclick="pingServices()" title="Connecting to microservices... Click to re-ping">
         <span class="status-dot"></span>
         <span class="status-text">Checking endpoints...</span>
       </div>
@@ -81,7 +81,7 @@
               </button>
               <button type="button" class="btn-sm btn-download" id="btn-download-text" onclick="downloadVector('text')" title="Download embedding JSON file">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Download (.json)
+                Download Embedding (.json)
               </button>
             </div>
           </div>
@@ -132,7 +132,7 @@
               </button>
               <button type="button" class="btn-sm btn-download" id="btn-download-image" onclick="downloadVector('image')" title="Download embedding JSON file">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Download (.json)
+                Download Embedding (.json)
               </button>
             </div>
           </div>
@@ -182,9 +182,16 @@
 
     function cleanUrl(url) {
       if (!url) return '';
-      let u = String(url).trim().replace(/\/+$/, '');
+      let u = String(url).trim();
+      u = u.replace(/\/+$/, '');
+      u = u.replace(/\/(health|embed)\/?$/i, '');
+      u = u.replace(/\/+$/, '');
       if (!/^https?:\/\//i.test(u)) {
-        u = 'https://' + u;
+        if (/^(localhost|127\.0\.0\.1)(:\d+)?/i.test(u)) {
+          u = 'http://' + u;
+        } else {
+          u = 'https://' + u;
+        }
       }
       return u;
     }
@@ -253,7 +260,12 @@
 
     function updateDimension(type) {
       const dim = document.getElementById(`${type}-dim-select`).value;
-      document.getElementById(`${type}-tensor-badge`).innerHTML = `Shape: [1 &times; ${dim}]`;
+      const currentVector = type === 'text' ? textVector : imageVector;
+      if (currentVector && currentVector.length === parseInt(dim)) {
+        document.getElementById(`${type}-tensor-badge`).innerHTML = `Shape: [1 &times; ${dim}] &middot; Normalized`;
+      } else {
+        document.getElementById(`${type}-tensor-badge`).innerHTML = `Shape: [1 &times; ${dim}]`;
+      }
       checkCrossModalSimilarity();
     }
 
@@ -278,7 +290,7 @@
         if (!baseUrl) return { ok: false, label, error: 'URL is required' };
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 12000);
+          const timeoutId = setTimeout(() => controller.abort(), 25000);
           const res = await fetch(`${baseUrl}/health`, {
             method: 'GET',
             mode: 'cors',
@@ -292,34 +304,42 @@
             return { ok: false, label, error: `HTTP ${res.status}` };
           }
           const data = await res.json().catch(() => null);
-          const isHealthy = Boolean(data && (data.status === 'healthy' || data.model_loaded === true));
+          const isHealthy = Boolean(res.ok && (data ? (data.model_loaded !== false && data.status !== 'unhealthy' && data.status !== 'error') : true));
           return { ok: isHealthy, label, data: data || {} };
         } catch (err) {
-          const msg = err.name === 'AbortError' ? 'Timeout (12s)' : (err.message || 'Network error');
+          const msg = err.name === 'AbortError' ? 'Timeout (25s)' : (err.message || 'Network error');
           return { ok: false, label, error: msg };
         }
       }
 
+      async function checkEndpointWithRetry(baseUrl, label) {
+        let res = await checkEndpoint(baseUrl, label);
+        if (!res.ok && (res.error === 'Timeout (25s)' || res.error === 'HTTP 502' || res.error === 'HTTP 503' || res.error === 'HTTP 504')) {
+          res = await checkEndpoint(baseUrl, label);
+        }
+        return res;
+      }
+
       try {
         const [tRes, iRes] = await Promise.all([
-          checkEndpoint(textUrl, 'Text'),
-          checkEndpoint(imgUrl, 'Image')
+          checkEndpointWithRetry(textUrl, 'Text'),
+          checkEndpointWithRetry(imgUrl, 'Image')
         ]);
 
         if (tRes.ok && iRes.ok) {
           badge.className = 'status-badge status-online';
-          badge.innerHTML = '<span class="status-dot"></span><span class="status-text">TEXT: ONLINE &middot; IMAGE: ONLINE</span>';
-          badge.title = `Text: ${tRes.data.service || 'healthy'} (${tRes.data.engine || 'ONNX Q4'})\nImage: ${iRes.data.service || 'healthy'} (${iRes.data.engine || 'ONNX Q4'})`;
+          badge.innerHTML = '<span class="status-dot"></span><span class="status-text">TEXT: ONLINE | IMAGE: ONLINE</span>';
+          badge.title = `Text: ${tRes.data.service || 'healthy'} (${tRes.data.engine || 'ONNX Q4'})\nImage: ${iRes.data.service || 'healthy'} (${iRes.data.engine || 'ONNX Q4'})\nClick to re-ping`;
         } else if (tRes.ok || iRes.ok) {
           badge.className = 'status-badge status-partial';
           const tStatus = tRes.ok ? 'ONLINE' : 'OFFLINE';
           const iStatus = iRes.ok ? 'ONLINE' : 'OFFLINE';
           badge.innerHTML = `<span class="status-dot"></span><span class="status-text">TEXT: ${tStatus} | IMAGE: ${iStatus}</span>`;
-          badge.title = `Text: ${tRes.ok ? 'healthy' : tRes.error}\nImage: ${iRes.ok ? 'healthy' : iRes.error}`;
+          badge.title = `Text: ${tRes.ok ? 'healthy' : tRes.error}\nImage: ${iRes.ok ? 'healthy' : iRes.error}\nClick to re-ping`;
         } else {
           badge.className = 'status-badge status-offline';
           badge.innerHTML = '<span class="status-dot"></span><span class="status-text">TEXT: OFFLINE | IMAGE: OFFLINE</span>';
-          badge.title = `Text error: ${tRes.error}\nImage error: ${iRes.error}`;
+          badge.title = `Text error: ${tRes.error}\nImage error: ${iRes.error}\nClick to re-ping`;
         }
       } finally {
         if (pingBtn) pingBtn.disabled = false;
@@ -344,18 +364,25 @@
       let sumSq = 0, min = Infinity, max = -Infinity;
       for (let i = 0; i < dim; i++) {
         const v = vector[i];
-        sumSq += v * v;
-        if (v < min) min = v;
-        if (v > max) max = v;
+        if (Number.isFinite(v)) {
+          sumSq += v * v;
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
       }
       const norm = Math.sqrt(sumSq);
 
       dimBadge.textContent = `Dim: ${dim}`;
-      normBadge.textContent = `Norm: ${norm.toFixed(4)}`;
-      rangeBadge.textContent = `Range: [${min.toFixed(4)}, ${max.toFixed(4)}]`;
+      normBadge.textContent = `Norm: ${Number.isFinite(norm) ? norm.toFixed(4) : 'N/A'}`;
+      rangeBadge.textContent = `Range: [${Number.isFinite(min) ? min.toFixed(4) : '0'}, ${Number.isFinite(max) ? max.toFixed(4) : '0'}]`;
 
-      const previewSnippet = vector.slice(0, 14).map(v => (v >= 0 ? '+' : '') + v.toFixed(4)).join(', ');
-      const formattedPreview = `[ ${previewSnippet}, ... +${dim - 14} more dims ]`;
+      const sliceCount = Math.min(14, dim);
+      const previewSnippet = vector.slice(0, sliceCount).map(v => (v >= 0 ? '+' : '') + v.toFixed(4)).join(', ');
+      const remainingDims = dim - sliceCount;
+      const formattedPreview = remainingDims > 0 
+        ? `[ ${previewSnippet}, ... +${remainingDims} more dims ]`
+        : `[ ${previewSnippet} ]`;
+
       const formattedFull = `[\n  ` + vector.map((v, idx) => {
         const valStr = (v >= 0 ? '+' : '') + v.toFixed(5);
         return (idx > 0 && idx % 8 === 0) ? `\n  ${valStr}` : valStr;
@@ -398,21 +425,34 @@
       const textToCopy = JSON.stringify(vector);
 
       try {
-        await navigator.clipboard.writeText(textToCopy);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(textToCopy);
+        } else {
+          throw new Error('Clipboard API unavailable');
+        }
       } catch (err) {
         const ta = document.createElement('textarea');
         ta.value = textToCopy;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        ta.style.left = '-9999px';
         document.body.appendChild(ta);
+        ta.focus();
         ta.select();
-        document.execCommand('copy');
+        try { document.execCommand('copy'); } catch (_) {}
         document.body.removeChild(ta);
       }
 
-      const origHtml = btn.innerHTML;
+      if (!btn.dataset.origHtml) {
+        btn.dataset.origHtml = btn.innerHTML;
+      }
       btn.innerHTML = 'Copied!';
       btn.style.color = '#15803d';
       setTimeout(() => {
-        btn.innerHTML = origHtml;
+        if (btn.dataset.origHtml) {
+          btn.innerHTML = btn.dataset.origHtml;
+          delete btn.dataset.origHtml;
+        }
         btn.style.color = '';
       }, 1800);
     }
@@ -427,9 +467,11 @@
       const dim = vector.length;
       let sumSq = 0, min = Infinity, max = -Infinity;
       for (const v of vector) {
-        sumSq += v * v;
-        if (v < min) min = v;
-        if (v > max) max = v;
+        if (Number.isFinite(v)) {
+          sumSq += v * v;
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
       }
       const norm = Math.sqrt(sumSq);
 
@@ -449,8 +491,8 @@
         type: 'image_embedding',
         model: 'EmbeddingGemma 2 Vision (SigLIP Architecture)',
         engine: 'onnxruntime-q4',
-        filename: selectedImageFile ? selectedImageFile.name : 'image.png',
-        format: selectedImageFile ? selectedImageFile.type : 'image/png',
+        filename: selectedImageFile ? (selectedImageFile.name || 'image.png') : 'image.png',
+        format: selectedImageFile ? (selectedImageFile.type || 'image/png') : 'image/png',
         dimension: dim,
         l2_norm: Number(norm.toFixed(6)),
         min: Number(min.toFixed(6)),
@@ -468,7 +510,7 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(dlUrl);
+      setTimeout(() => URL.revokeObjectURL(dlUrl), 2000);
     }
 
     async function embedText() {
@@ -498,7 +540,10 @@
           throw new Error(errData.detail || `HTTP ${resp.status} ${resp.statusText}`);
         }
         const data = await resp.json();
-        textVector = data.embeddings[0];
+        textVector = (data.embeddings && data.embeddings.length > 0) ? data.embeddings[0] : (data.embedding || null);
+        if (!textVector) {
+          throw new Error('No embedding vector returned by text microservice');
+        }
         document.getElementById('text-tensor-badge').innerHTML = `Shape: [1 &times; ${textVector.length}] &middot; Normalized`;
         drawVectorRibbon('text-vector-canvas', textVector);
         renderVectorInspector('text', textVector);
@@ -538,7 +583,10 @@
           throw new Error(errData.detail || `HTTP ${resp.status} ${resp.statusText}`);
         }
         const data = await resp.json();
-        imageVector = data.embedding;
+        imageVector = data.embedding || ((data.embeddings && data.embeddings.length > 0) ? data.embeddings[0] : null);
+        if (!imageVector) {
+          throw new Error('No embedding vector returned by vision microservice');
+        }
         document.getElementById('image-tensor-badge').innerHTML = `Shape: [1 &times; ${imageVector.length}] &middot; Normalized`;
         drawVectorRibbon('image-vector-canvas', imageVector);
         renderVectorInspector('image', imageVector);
@@ -560,6 +608,7 @@
       if (!textVector && !imageVector) {
         scoreEl.textContent = '0.0000';
         gaugeFill.style.width = '0%';
+        gaugeFill.style.backgroundColor = 'var(--accent)';
         verdict.textContent = 'Awaiting Embeddings';
         verdict.style.color = 'var(--ink-muted)';
         dimWarning.style.display = 'none';
@@ -569,6 +618,7 @@
       if (textVector && !imageVector) {
         scoreEl.textContent = '0.0000';
         gaugeFill.style.width = '0%';
+        gaugeFill.style.backgroundColor = 'var(--accent)';
         verdict.textContent = 'Text Ready &middot; Embed Image to Compute';
         verdict.style.color = '#b45309';
         dimWarning.style.display = 'none';
@@ -578,6 +628,7 @@
       if (!textVector && imageVector) {
         scoreEl.textContent = '0.0000';
         gaugeFill.style.width = '0%';
+        gaugeFill.style.backgroundColor = 'var(--accent)';
         verdict.textContent = 'Image Ready &middot; Embed Text to Compute';
         verdict.style.color = '#b45309';
         dimWarning.style.display = 'none';
@@ -598,7 +649,8 @@
         normA += textVector[i] * textVector[i];
         normB += imageVector[i] * imageVector[i];
       }
-      const sim = (normA > 0 && normB > 0) ? (dot / (Math.sqrt(normA) * Math.sqrt(normB))) : 0;
+      let sim = (normA > 0 && normB > 0) ? (dot / (Math.sqrt(normA) * Math.sqrt(normB))) : 0;
+      if (Math.abs(sim) < 0.00005) sim = 0;
       const clamped = Math.max(0, Math.min(1, sim));
 
       scoreEl.textContent = (sim >= 0 ? '+' : '') + sim.toFixed(4);
@@ -607,15 +659,19 @@
       if (sim >= 0.65) {
         verdict.textContent = 'Strong Semantic Match';
         verdict.style.color = '#15803d';
+        gaugeFill.style.backgroundColor = '#15803d';
       } else if (sim >= 0.40) {
         verdict.textContent = 'Moderate Alignment';
         verdict.style.color = '#b45309';
+        gaugeFill.style.backgroundColor = '#d97706';
       } else if (sim >= 0.15) {
         verdict.textContent = 'Low Semantic Overlap';
         verdict.style.color = '#d97706';
+        gaugeFill.style.backgroundColor = '#ea580c';
       } else {
         verdict.textContent = 'Negligible / Low Correlation';
         verdict.style.color = '#6b6a63';
+        gaugeFill.style.backgroundColor = '#9ca3af';
       }
     }
 
