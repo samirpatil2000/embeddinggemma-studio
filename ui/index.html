@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EmbeddingGemma 2 Multimodal Studio</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body>
+
+  <div class="studio-wrap">
+    
+    <header class="studio-header">
+      <div>Google DeepMind &middot; Gemma 4 Architecture</div>
+      <div id="api-status-badge">API Status: Unchecked</div>
+    </header>
+
+    <h1 class="studio-title">EmbeddingGemma 2 Studio</h1>
+    <p class="studio-subtitle">
+      Natively multimodal text and vision embeddings in a shared 768-dimensional mathematical coordinate space.
+    </p>
+
+    <!-- Endpoint Configuration Bar -->
+    <div class="endpoint-bar">
+      <div class="endpoint-group">
+        <label for="text-url">Text Service Endpoint</label>
+        <input type="text" id="text-url" value="http://localhost:8001" placeholder="https://embeddinggemma-text.onrender.com">
+      </div>
+      <div class="endpoint-group">
+        <label for="image-url">Image Service Endpoint</label>
+        <input type="text" id="image-url" value="http://localhost:8002" placeholder="https://embeddinggemma-image.onrender.com">
+      </div>
+      <button class="btn-ping" id="btn-ping" onclick="pingServices()">Ping APIs</button>
+    </div>
+
+    <!-- Playground Grid: Text & Image -->
+    <div class="playground-grid">
+
+      <!-- Text Panel -->
+      <div class="card">
+        <h2 class="card-title">1. Text Encoder</h2>
+        <p class="card-desc">Embed natural queries, code, or knowledge passages.</p>
+        <div class="tensor-badge" id="text-tensor-badge">Shape: [1 &times; 768]</div>
+
+        <label class="input-label" for="text-input">Input Text</label>
+        <textarea id="text-input" placeholder="Type a search query (e.g., 'A fresh red apple with a green leaf')...">A fresh red apple with a green leaf</textarea>
+
+        <div class="controls-row">
+          <select id="task-select" class="select-control">
+            <option value="SearchQuery">Task: SearchQuery (Asymmetric)</option>
+            <option value="Document">Task: Document (Passage)</option>
+            <option value="CodeRetrieval">Task: CodeRetrieval</option>
+            <option value="SentenceSimilarity">Task: SentenceSimilarity</option>
+          </select>
+          <select id="text-dim-select" class="select-control" onchange="updateDimension('text')">
+            <option value="768">Dim: 768 (Native)</option>
+            <option value="512">Dim: 512 (MRL)</option>
+            <option value="256">Dim: 256 (MRL Compact)</option>
+            <option value="128">Dim: 128 (MRL Ultra)</option>
+          </select>
+        </div>
+
+        <button class="btn-primary" id="btn-embed-text" onclick="embedText()">Embed Text</button>
+        <canvas id="text-vector-canvas" class="vector-mini-canvas"></canvas>
+      </div>
+
+      <!-- Image Panel -->
+      <div class="card">
+        <h2 class="card-title">2. Vision Encoder</h2>
+        <p class="card-desc">Upload photos or graphics to extract 140/280-token visual features.</p>
+        <div class="tensor-badge" id="image-tensor-badge">Shape: [1 &times; 768]</div>
+
+        <label class="input-label">Input Image</label>
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+          <span id="dropzone-text">Drag & drop image here or click to browse</span>
+          <img id="preview-img" class="preview-img" alt="Preview">
+        </div>
+        <input type="file" id="file-input" accept="image/*" style="display:none;" onchange="handleFileSelect(event)">
+
+        <div class="controls-row">
+          <select id="image-dim-select" class="select-control" onchange="updateDimension('image')">
+            <option value="768">Dim: 768 (Native)</option>
+            <option value="512">Dim: 512 (MRL)</option>
+            <option value="256">Dim: 256 (MRL Compact)</option>
+            <option value="128">Dim: 128 (MRL Ultra)</option>
+          </select>
+        </div>
+
+        <button class="btn-primary" id="btn-embed-image" onclick="embedImage()" disabled>Embed Image</button>
+        <canvas id="image-vector-canvas" class="vector-mini-canvas"></canvas>
+      </div>
+
+    </div>
+
+    <!-- Live Multimodal Similarity Result Panel -->
+    <div class="results-panel">
+      <h2 class="card-title">3. Cross-Modal Similarity Engine</h2>
+      <p class="card-desc">
+        Computes cosine similarity between Text and Image vectors:
+        <em>sim(u, v) = (u &middot; v) / (||u|| ||v||)</em>
+      </p>
+
+      <div class="similarity-gauge-wrap">
+        <div class="gauge-bar-bg">
+          <div id="gauge-fill" class="gauge-bar-fill"></div>
+        </div>
+        <div class="score-display">
+          <div>
+            <span class="score-number" id="score-text">0.0000</span>
+            <span style="font-size:.9rem; color:var(--ink-muted); margin-left:8px;">Cosine Score</span>
+          </div>
+          <div id="verdict-badge" style="font-size:.9rem; font-weight:500;">Awaiting Embeddings</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let textVector = null;
+    let imageVector = null;
+    let selectedImageFile = null;
+
+    // Default sample image generator (Red Apple)
+    window.addEventListener('DOMContentLoaded', () => {
+      createDefaultApple();
+      pingServices();
+    });
+
+    function createDefaultApple() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 200; canvas.height = 200;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 200, 200);
+      // Apple body
+      ctx.fillStyle = '#dc1e1e';
+      ctx.beginPath(); ctx.arc(100, 110, 65, 0, Math.PI * 2); ctx.fill();
+      // Leaf
+      ctx.fillStyle = '#228b22';
+      ctx.beginPath(); ctx.ellipse(100, 40, 14, 25, Math.PI / 4, 0, Math.PI * 2); ctx.fill();
+      
+      canvas.toBlob(blob => {
+        selectedImageFile = new File([blob], 'default_apple.png', { type: 'image/png' });
+        const img = document.getElementById('preview-img');
+        img.src = canvas.toDataURL();
+        img.style.display = 'block';
+        document.getElementById('dropzone-text').style.display = 'none';
+        document.getElementById('btn-embed-image').disabled = false;
+      });
+    }
+
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      selectedImageFile = file;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const img = document.getElementById('preview-img');
+        img.src = ev.target.result;
+        img.style.display = 'block';
+        document.getElementById('dropzone-text').style.display = 'none';
+        document.getElementById('btn-embed-image').disabled = false;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Drag and drop handlers
+    const dropzone = document.getElementById('dropzone');
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        document.getElementById('file-input').files = e.dataTransfer.files;
+        handleFileSelect({ target: { files: e.dataTransfer.files } });
+      }
+    });
+
+    function updateDimension(type) {
+      const dim = document.getElementById(`${type}-dim-select`).value;
+      document.getElementById(`${type}-tensor-badge`).innerHTML = `Shape: [1 &times; ${dim}]`;
+    }
+
+    async function pingServices() {
+      const textUrl = document.getElementById('text-url').value.trim();
+      const imgUrl = document.getElementById('image-url').value.trim();
+      const badge = document.getElementById('api-status-badge');
+      badge.textContent = 'Checking endpoints...';
+
+      try {
+        const [r1, r2] = await Promise.allSettled([
+          fetch(`${textUrl}/health`, { method: 'GET' }),
+          fetch(`${imgUrl}/health`, { method: 'GET' })
+        ]);
+        const tOk = r1.status === 'fulfilled' && r1.value.ok;
+        const iOk = r2.status === 'fulfilled' && r2.value.ok;
+        
+        if (tOk && iOk) {
+          badge.textContent = '● APIs Online';
+          badge.style.color = '#2e5c38';
+        } else {
+          badge.textContent = `● Text: ${tOk ? 'OK' : 'Offline'} | Image: ${iOk ? 'OK' : 'Offline'}`;
+          badge.style.color = '#c0392b';
+        }
+      } catch (err) {
+        badge.textContent = '● APIs Offline (Check URLs)';
+        badge.style.color = '#c0392b';
+      }
+    }
+
+    async function embedText() {
+      const text = document.getElementById('text-input').value.trim();
+      const task = document.getElementById('task-select').value;
+      const dim = parseInt(document.getElementById('text-dim-select').value);
+      const url = document.getElementById('text-url').value.trim();
+      const btn = document.getElementById('btn-embed-text');
+
+      btn.disabled = true;
+      btn.textContent = 'Encoding...';
+
+      try {
+        const resp = await fetch(`${url}/embed`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texts: text, task: task, truncate_dim: dim })
+        });
+        const data = await resp.json();
+        textVector = data.embeddings[0];
+        document.getElementById('text-tensor-badge').innerHTML = `Shape: [1 &times; ${textVector.length}] &middot; Normalized`;
+        drawVectorRibbon('text-vector-canvas', textVector);
+        checkCrossModalSimilarity();
+      } catch (e) {
+        alert('Failed to call Text Service: ' + e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Embed Text';
+      }
+    }
+
+    async function embedImage() {
+      if (!selectedImageFile) return;
+      const dim = document.getElementById('image-dim-select').value;
+      const url = document.getElementById('image-url').value.trim();
+      const btn = document.getElementById('btn-embed-image');
+
+      btn.disabled = true;
+      btn.textContent = 'Encoding...';
+
+      const formData = new FormData();
+      formData.append('file', selectedImageFile);
+      formData.append('truncate_dim', dim);
+
+      try {
+        const resp = await fetch(`${url}/embed`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await resp.json();
+        imageVector = data.embedding;
+        document.getElementById('image-tensor-badge').innerHTML = `Shape: [1 &times; ${imageVector.length}] &middot; Normalized`;
+        drawVectorRibbon('image-vector-canvas', imageVector);
+        checkCrossModalSimilarity();
+      } catch (e) {
+        alert('Failed to call Image Service: ' + e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Embed Image';
+      }
+    }
+
+    function checkCrossModalSimilarity() {
+      if (!textVector || !imageVector) return;
+
+      const len = Math.min(textVector.length, imageVector.length);
+      let dot = 0, normA = 0, normB = 0;
+      for (let i = 0; i < len; i++) {
+        dot += textVector[i] * imageVector[i];
+        normA += textVector[i] * textVector[i];
+        normB += imageVector[i] * imageVector[i];
+      }
+      const sim = dot / (Math.sqrt(normA) * Math.sqrt(normB));
+      const clamped = Math.max(0, Math.min(1, sim));
+
+      document.getElementById('score-text').textContent = sim.toFixed(4);
+      document.getElementById('gauge-fill').style.width = `${(clamped * 100).toFixed(1)}%`;
+
+      const verdict = document.getElementById('verdict-badge');
+      if (sim >= 0.65) {
+        verdict.textContent = 'Strong Semantic Match';
+        verdict.style.color = '#2e5c38';
+      } else if (sim >= 0.45) {
+        verdict.textContent = 'Moderate Alignment';
+        verdict.style.color = '#f0ad4e';
+      } else {
+        verdict.textContent = 'Low Semantic Overlap';
+        verdict.style.color = '#d9534f';
+      }
+    }
+
+    function drawVectorRibbon(canvasId, vector) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = canvas.clientWidth;
+      const h = canvas.height = canvas.clientHeight;
+      const step = w / vector.length;
+
+      for (let i = 0; i < vector.length; i++) {
+        const val = vector[i]; // range approx -0.15 to +0.15
+        const intensity = Math.floor((val + 0.15) / 0.3 * 255);
+        const clamped = Math.max(0, Math.min(255, intensity));
+        ctx.fillStyle = `rgb(${clamped}, ${clamped}, ${255 - clamped})`;
+        ctx.fillRect(i * step, 0, step + 1, h);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+services:
+  # 1. Text Embedding API (8-bit Q8_0, 271M parameters, ~340MB RAM)
+  - type: web
+    name: embeddinggemma-text
+    runtime: docker
+    dockerfilePath: services/text_service/Dockerfile
+    dockerContext: services/text_service
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: TORCH_NUM_THREADS
+        value: "1"
+      - key: OMP_NUM_THREADS
+        value: "1"
+
+  # 2. Image & Video Embedding API (4-bit Q4, 438M parameters, ~420MB RAM)
+  - type: web
+    name: embeddinggemma-image
+    runtime: docker
+    dockerfilePath: services/image_service/Dockerfile
+    dockerContext: services/image_service
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: TORCH_NUM_THREADS
+        value: "1"
+      - key: OMP_NUM_THREADS
+        value: "1"
+
+  # 3. Audio Embedding API (4-bit Q4, 576M parameters, ~440MB RAM)
+  - type: web
+    name: embeddinggemma-audio
+    runtime: docker
+    dockerfilePath: services/audio_service/Dockerfile
+    dockerContext: services/audio_service
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: TORCH_NUM_THREADS
+        value: "1"
+      - key: OMP_NUM_THREADS
+        value: "1"
+
+  # 4. Interactive Studio Web UI (Static Site, Free CDN Edge Hosting, 0 MB Container RAM)
+  - type: static_site
+    name: embeddinggemma-ui
+    publishPath: ./ui
+    pullRequestPreviewsEnabled: true
