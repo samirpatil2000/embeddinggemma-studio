@@ -69,6 +69,9 @@ def load_model():
     session = ort.InferenceSession(MODEL_PATH, sess_options=opts, providers=["CPUExecutionProvider"])
     print("ONNX Q4 model initialized successfully! Memory footprint: ~220MB.")
 
+@app.get("/")
+@app.get("/status")
+@app.get("/api/status")
 @app.get("/health")
 def health_check():
     return {

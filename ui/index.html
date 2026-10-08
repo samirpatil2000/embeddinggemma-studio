@@ -288,34 +288,38 @@
 
       async function checkEndpoint(baseUrl, label) {
         if (!baseUrl) return { ok: false, label, error: 'URL is required' };
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 25000);
-          const res = await fetch(`${baseUrl}/health`, {
-            method: 'GET',
-            mode: 'cors',
-            credentials: 'omit',
-            cache: 'no-cache',
-            headers: { 'Accept': 'application/json' },
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
+        const probePaths = ['/api/status', '/status', '/health', '/'];
+        let lastErr = null;
 
-          if (!res.ok) {
-            return { ok: false, label, error: `HTTP ${res.status}` };
+        for (const path of probePaths) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const res = await fetch(`${baseUrl}${path}`, {
+              method: 'GET',
+              mode: 'cors',
+              credentials: 'omit',
+              cache: 'no-cache',
+              headers: { 'Accept': 'application/json' },
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+              const data = await res.json().catch(() => null);
+              const isHealthy = Boolean(data ? (data.model_loaded !== false && data.status !== 'unhealthy' && data.status !== 'error') : true);
+              return { ok: isHealthy, label, data: data || {} };
+            }
+          } catch (err) {
+            lastErr = err.name === 'AbortError' ? 'Timeout (15s)' : (err.message || 'Network error');
           }
-          const data = await res.json().catch(() => null);
-          const isHealthy = Boolean(res.ok && (data ? (data.model_loaded !== false && data.status !== 'unhealthy' && data.status !== 'error') : true));
-          return { ok: isHealthy, label, data: data || {} };
-        } catch (err) {
-          const msg = err.name === 'AbortError' ? 'Timeout (25s)' : (err.message || 'Network error');
-          return { ok: false, label, error: msg };
         }
+        return { ok: false, label, error: lastErr || 'Endpoint unreachable' };
       }
 
       async function checkEndpointWithRetry(baseUrl, label) {
         let res = await checkEndpoint(baseUrl, label);
-        if (!res.ok && (res.error === 'Timeout (25s)' || res.error === 'HTTP 502' || res.error === 'HTTP 503' || res.error === 'HTTP 504')) {
+        if (!res.ok && (res.error === 'Timeout (15s)' || res.error === 'HTTP 502' || res.error === 'HTTP 503' || res.error === 'HTTP 504')) {
           res = await checkEndpoint(baseUrl, label);
         }
         return res;
