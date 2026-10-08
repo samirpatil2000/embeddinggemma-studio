@@ -1,5 +1,5 @@
 services:
-  # 1. Text Embedding API (8-bit Q8_0, 271M parameters, ~340MB RAM)
+  # 1. Text Embedding API (102MB Q4 ONNX Runtime, ~220MB RAM)
   - type: web
     name: embeddinggemma-text
     runtime: docker
@@ -10,12 +10,10 @@ services:
     healthCheckPath: /health
     envVars:
       - key: PORT
-        value: 8000
+        value: "10000"
       - key: MALLOC_ARENA_MAX
         value: "2"
       - key: PYTHONUNBUFFERED
-        value: "1"
-      - key: TORCH_NUM_THREADS
         value: "1"
       - key: OMP_NUM_THREADS
         value: "1"

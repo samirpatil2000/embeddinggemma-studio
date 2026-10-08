@@ -4,13 +4,13 @@ from typing import List, Optional, Union
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
-import torch
+from tokenizers import Tokenizer
+import onnxruntime as ort
 
 app = FastAPI(
-    title="EmbeddingGemma 2 - Text Embedding Service",
-    description="8-bit text embedding microservice optimized for 512MB memory machines",
-    version="1.0.0",
+    title="EmbeddingGemma 2 - Text Embedding Service (ONNX Q4)",
+    description="Ultra-compact 102MB Q4 ONNX text embedding microservice (<250MB RAM)",
+    version="2.0.0",
 )
 
 # Enable CORS for web UI access
@@ -22,7 +22,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-model = None
+session = None
+tokenizer = None
+
+MODEL_DIR = os.environ.get("MODEL_DIR", "/app/model")
+MODEL_PATH = os.path.join(MODEL_DIR, "onnx", "model_q4.onnx")
+TOKENIZER_PATH = os.path.join(MODEL_DIR, "tokenizer.json")
 
 class EmbedRequest(BaseModel):
     texts: Union[str, List[str]]
@@ -35,33 +40,46 @@ class EmbedResponse(BaseModel):
     dimension: int
     count: int
 
+def normalize(v: np.ndarray) -> np.ndarray:
+    norm = np.linalg.norm(v, axis=-1, keepdims=True)
+    return v / np.maximum(norm, 1e-12)
+
 @app.on_event("startup")
 def load_model():
-    global model
-    device = os.environ.get("DEVICE", "mps" if torch.backends.mps.is_available() else "cpu")
-    dtype = torch.bfloat16 if device in ("mps", "cuda") else torch.float32
-    print(f"Loading EmbeddingGemma 2 (Text-Only) on {device} ({dtype})...")
-    # Disabling unused vision and audio encoders keeps parameters to 271M (~340MB RAM in 8-bit)
-    model = SentenceTransformer(
-        "google/embeddinggemma-2",
-        config_kwargs={"vision_config": None, "audio_config": None},
-        model_kwargs={"torch_dtype": dtype},
-        device=device,
-    )
-    print("Text embedding model loaded successfully.")
+    global session, tokenizer
+    print(f"Loading ONNX Q4 Session from {MODEL_PATH}...")
+    
+    # Fallback to downloading if not baked into image (e.g. local dev)
+    if not os.path.exists(MODEL_PATH) or not os.path.exists(TOKENIZER_PATH):
+        from huggingface_hub import hf_hub_download
+        print("Model files not found locally, downloading from Hugging Face Hub...")
+        hf_hub_download(repo_id="tooape/embeddinggemma-300m-qat-q8-ONNX", filename="onnx/model_q4.onnx", local_dir=MODEL_DIR)
+        hf_hub_download(repo_id="tooape/embeddinggemma-300m-qat-q8-ONNX", filename="tokenizer.json", local_dir=MODEL_DIR)
+
+    tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
+    
+    opts = ort.SessionOptions()
+    opts.enable_cpu_mem_arena = False
+    opts.enable_mem_pattern = False
+    opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    opts.intra_op_num_threads = 1
+    opts.inter_op_num_threads = 1
+    
+    session = ort.InferenceSession(MODEL_PATH, sess_options=opts, providers=["CPUExecutionProvider"])
+    print("ONNX Q4 model initialized successfully! Memory footprint: ~220MB.")
 
 @app.get("/health")
 def health_check():
     return {
         "status": "healthy",
         "service": "embeddinggemma-text-service",
-        "precision": "8-bit / optimized",
-        "model_loaded": model is not None,
+        "engine": "onnxruntime-q4",
+        "model_loaded": session is not None and tokenizer is not None,
     }
 
 @app.post("/embed", response_model=EmbedResponse)
 def embed(request: EmbedRequest):
-    if model is None:
+    if session is None or tokenizer is None:
         raise HTTPException(status_code=503, detail="Model is still initializing")
 
     raw_texts = [request.texts] if isinstance(request.texts, str) else request.texts
@@ -70,32 +88,38 @@ def embed(request: EmbedRequest):
 
     task = request.task or "SearchQuery"
     formatted_texts = []
-    use_prompt_name = None
-
-    if task == "Document" and request.title:
-        formatted_texts = [f"title: {request.title} | text: {t}" for t in raw_texts]
-    else:
-        formatted_texts = raw_texts
-        use_prompt_name = task
+    
+    for t in raw_texts:
+        if task == "Document":
+            prefix = f"title: {request.title or 'none'} | text: "
+            formatted_texts.append(f"{prefix}{t}")
+        elif task == "SearchQuery":
+            formatted_texts.append(f"task: search result | query: {t}")
+        else:
+            formatted_texts.append(f"task: {task} | query: {t}")
 
     dim = request.truncate_dim if request.truncate_dim in (128, 256, 512, 768) else 768
+    all_embeddings = []
 
-    embeddings = model.encode(
-        formatted_texts,
-        prompt_name=use_prompt_name,
-        truncate_dim=dim,
-        normalize_embeddings=True,
-    )
+    for text in formatted_texts:
+        encoded = tokenizer.encode(text, add_special_tokens=True)
+        input_ids = np.array([encoded.ids], dtype=np.int64)
+        attention_mask = np.ones_like(input_ids)
 
-    if isinstance(embeddings, np.ndarray):
-        result = embeddings.tolist()
-    else:
-        result = [emb.tolist() for emb in embeddings]
-
-    dim_actual = len(result[0]) if result else 0
+        outputs = session.run(["sentence_embedding"], {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask
+        })
+        emb = outputs[0][0] # shape (768,)
+        
+        # MRL dimension truncation
+        truncated = emb[:dim]
+        # L2 normalization
+        normalized = normalize(truncated)
+        all_embeddings.append(normalized.tolist())
 
     return EmbedResponse(
-        embeddings=result,
-        dimension=dim_actual,
-        count=len(result),
+        embeddings=all_embeddings,
+        dimension=dim,
+        count=len(all_embeddings),
     )
