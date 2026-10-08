@@ -63,7 +63,8 @@ services:
         value: "1"
 
   # 4. Interactive Studio Web UI (Static Site, Free CDN Edge Hosting, 0 MB Container RAM)
-  - type: static_site
+  - type: web
     name: embeddinggemma-ui
-    publishPath: ./ui
-    pullRequestPreviewsEnabled: true
+    runtime: static
+    staticPublishPath: ./ui
+
